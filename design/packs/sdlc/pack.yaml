@@ -1,0 +1,34 @@
+# Software delivery: a feature request becomes a spec, a reviewed build, and a merge.
+#
+# A step runs plan -> act -> review -> finalize. Each substep is a list of items, run in order.
+# A bare name is a file in roles/; braces are inline items ({ run: <command> }, { kind: <pack code> }).
+# `reviewers` means every role whose `at` is this step, picked by its `when` rule.
+# The job moves to the next step only when the whole review list passes. See README.md.
+
+name: sdlc
+title: Software delivery
+workspace: git-worktree           # a branch and worktree per job; global.command.setup runs once
+facts: spec                       # `when` rules read the spec's frontmatter
+
+start:
+  - manual
+  - schedule: { when: "ticket.status = Ready" }
+
+cancel:
+  - board: { when: "ticket.status = Closed" }
+
+steps:
+  spec:
+    act:    [spec-writer]
+    review: [reviewers]
+
+  build:
+    act:     [builder]
+    review:  [{ run: lint }, { run: build }, { run: test }, tester, reviewers]
+    referee: spec-writer          # rules on disputes about the spec
+
+  merge:
+    act:      [{ kind: open-pr }]                   # rebase onto base, push, open or update the PR
+    review:   [{ run: test }, reviewers, { kind: ci }, { role: maintainer, via: host }]
+    finalize: [{ kind: merge, on_fail: act }, { kind: cleanup }]
+    reopen:   build                                 # findings the PR step can't fix go to the builder

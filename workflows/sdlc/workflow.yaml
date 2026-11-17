@@ -1,0 +1,47 @@
+# The SDLC workflow: a feature request goes through Spec, Build and Release.
+# A stage's phases run in this order: Plan (once); the loop Do, Verify, Review (one pass is a round, repeated until
+# Verify and Review pass); Finalize (prepares what you sign off, a failure goes back to Do); Finish, which starts with
+# your sign-off, then what cannot be undone. This file is the repo's copy: add a step by adding a line, turn one off
+# with `enabled: false` (a step or a sign-off). Tuning (rounds, budgets ...) is in settings.md. `epi upgrade` merges
+# the plugin's changes into this file.
+# A step may carry `name` (how people see it) and `doing` (what the card says while it runs).
+# One step per line, in the flow style below, so that tools can edit this file line by line.
+name: sdlc
+version: 0.8.0
+workspace: git-worktree
+facts: spec
+on:
+  manual:
+    inputs:
+      request: string
+stages:
+  spec:
+    name: Spec
+    do:
+      - { uses: agent/spec-writer, name: Spec writer, doing: Writing the spec, outputs: [risk] }
+    signoff: { by: approver, name: Sign-off, doing: Waiting for your sign-off }
+  build:
+    name: Build
+    do:
+      - { uses: agent/builder, name: Builder, doing: Building }
+    verify:
+      - { run: lint, name: Lint, doing: Linting }
+      - { run: build, name: Build check, doing: Building the project }
+      - { run: test, name: Tests, doing: Running the tests }
+    review:
+      - { uses: agent/tester, name: Tester, doing: Testing against the spec }
+      - { uses: skill/code-review, name: Code review, doing: Code review running, always_rerun: true }
+      - { uses: skill/security-review, name: Security review, doing: Security review running, if: "stages.spec.steps.spec-writer.outputs.risk >= medium" }
+    finalize:
+      - { run: open-pr, name: Pull request, doing: Opening the pull request }
+      - { run: ci, name: CI, doing: Checking CI }
+    signoff: { by: approver, name: Sign-off, doing: Waiting for your sign-off, with: { via: host } }
+  release:
+    name: Release
+    do:
+      - { run: open-pr, id: update-branch, name: Update branch, doing: Updating the branch }
+    verify:
+      - { run: test, name: Tests, doing: Running the tests }
+    finish:
+      - { run: merge, name: Merge, doing: Merging, on_fail: do }
+      - { run: cleanup, name: Clean up, doing: Cleaning up }

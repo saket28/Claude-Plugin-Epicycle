@@ -1,0 +1,57 @@
+{
+ "pack": "sdlc",
+ "tabs": [
+  {
+   "id": "step.spec",
+   "title": "Spec",
+   "sections": [
+    {"id": "loop", "title": "Rounds", "fields": [
+     {"path": "step.spec.rounds", "type": "int", "min": 1, "default": 3,
+      "help": "Spec revisions after reviews ask for changes, before a person decides."},
+     {"path": "step.spec.skip", "type": "list", "item_options": ["reviewers", "maintainer"], "default": ["maintainer"],
+      "help": "Items to leave out of this step, one per line."}]},
+    {"id": "format", "title": "Format", "fields": [
+     {"path": "step.spec.format.sections", "type": "list", "default": [],
+      "help": "Extra sections every spec must have, one per line."}]}
+   ]
+  },
+  {
+   "id": "step.build",
+   "title": "Build",
+   "sections": [
+    {"id": "loop", "title": "Rounds", "fields": [
+     {"path": "step.build.rounds", "type": "int", "min": 1, "max": 6, "default": 3,
+      "help": "Build-and-review cycles before open issues go to a person."},
+     {"path": "step.build.skip", "type": "list", "item_options": ["lint", "build", "test", "tester", "reviewers"],
+      "default": [], "help": "Items to leave out of this step, one per line."}]},
+    {"id": "severity", "title": "Severity", "fields": [
+     {"path": "step.build.severity.nits_block", "type": "bool", "default": false,
+      "help": "Treat nits as blocking."}]}
+   ]
+  },
+  {
+   "id": "step.merge",
+   "title": "Merge",
+   "sections": [
+    {"id": "loop", "title": "Rounds", "fields": [
+     {"path": "step.merge.rounds", "type": "int", "min": 1, "default": 2,
+      "help": "Times the PR is updated and reviewed again before a person decides."},
+     {"path": "step.merge.reopens", "type": "int", "min": 0, "default": 2,
+      "help": "Times a failure here may send the job back to the builder."},
+     {"path": "step.merge.skip", "type": "list", "item_options": ["test", "reviewers", "ci", "maintainer"],
+      "default": [], "help": "Items to leave out of this step, one per line."}]},
+    {"id": "merge", "title": "Merge", "fields": [
+     {"path": "step.merge.merge.strategy", "type": "enum", "options": ["squash", "merge", "rebase"],
+      "default": "squash", "help": "How the branch lands on the base branch."},
+     {"path": "step.merge.merge.message", "type": "string", "placeholders": ["title", "id", "branch"],
+      "default": "{title} (job-{id})", "help": "The merge commit message."},
+     {"path": "step.merge.merge.delete_branch", "type": "bool", "default": true,
+      "help": "Delete the job's branch after the merge."}]},
+    {"id": "pr", "title": "Pull request", "fields": [
+     {"path": "step.merge.pr.draft", "type": "bool", "default": false, "help": "Open the PR as a draft."},
+     {"path": "step.merge.pr.labels", "type": "list", "default": [], "help": "Labels added to the PR."},
+     {"path": "step.merge.pr.reviewers", "type": "list", "default": [], "help": "Reviewers requested on the PR."}]}
+   ]
+  }
+ ]
+}

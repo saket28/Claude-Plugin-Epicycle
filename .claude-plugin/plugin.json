@@ -1,0 +1,18 @@
+{
+  "name": "epi",
+  "displayName": "Epicycle",
+  "version": "0.7.1",
+  "description": "Epicycle runs AI agents through workflow stages you define: each stage loops until its checks pass, disagreements go to a person, and every stage can end with your sign-off. Ships with the sdlc playbook (Spec, Build, Release).",
+  "author": {
+    "name": "Saket Porwal"
+  },
+  "license": "MIT",
+  "keywords": [
+    "epicycle",
+    "workflow",
+    "sdlc",
+    "review",
+    "ci",
+    "agents"
+  ]
+}

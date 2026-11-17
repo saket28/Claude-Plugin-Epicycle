@@ -1,0 +1,172 @@
+{
+  "version": 1,
+  "roles": [
+    "spec-writer",
+    "builder",
+    "tester",
+    "reviewer"
+  ],
+  "stage_defaults": {
+    "spec": {
+      "budget_tokens": 150000
+    },
+    "build": {
+      "budget_tokens": 1500000
+    },
+    "release": {
+      "budget_tokens": 100000
+    }
+  },
+  "agent_defaults": {
+    "builder": {
+      "writes": "worktree"
+    },
+    "tester": {
+      "writes": "paths",
+      "paths": [
+        "tests/**",
+        "test/**",
+        "**/*.test.*",
+        "**/*_test.*",
+        "**/test_*.py"
+      ]
+    }
+  },
+  "tabs": [
+    {
+      "id": "global",
+      "sections": [
+        {
+          "id": "command",
+          "fields": [
+            {
+              "path": "global.command.build",
+              "type": "string",
+              "default": null,
+              "help": "Build command, run by the build step of the Build stage.",
+              "label": "Build command",
+              "level": "basic"
+            },
+            {
+              "path": "global.command.lint",
+              "type": "string",
+              "default": null,
+              "help": "Lint command, run by the lint step of the Build stage.",
+              "label": "Lint command",
+              "level": "basic"
+            },
+            {
+              "path": "global.command.test",
+              "type": "string",
+              "default": null,
+              "help": "Test command, run by the test steps and given to the tester.",
+              "label": "Test command",
+              "level": "basic"
+            }
+          ]
+        },
+        {
+          "id": "host",
+          "title": "Host",
+          "freeform": true,
+          "fields": [
+            {
+              "path": "global.host.adapter",
+              "type": "enum",
+              "options": [
+                "local",
+                "github"
+              ],
+              "allow_custom": true,
+              "default": null,
+              "help": "Local git, GitHub (through gh), or a command your repo provides.",
+              "label": "Where code lands",
+              "level": "advanced"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "stage",
+      "sections": [
+        {
+          "id": "build",
+          "fields": [
+            {
+              "path": "stage.build.pr_draft",
+              "type": "bool",
+              "default": false,
+              "help": "GitHub only.",
+              "label": "Open pull requests as drafts"
+            },
+            {
+              "path": "stage.build.pr_labels",
+              "type": "list",
+              "default": [],
+              "help": "Labels added to the pull request, one per line. They must exist.",
+              "label": "Pull request labels"
+            },
+            {
+              "path": "stage.build.pr_reviewers",
+              "type": "list",
+              "default": [],
+              "help": "People asked to review the pull request, one per line.",
+              "label": "Pull request reviewers"
+            },
+            {
+              "path": "stage.build.ci_required",
+              "type": "bool",
+              "default": true,
+              "help": "Wait for CI to pass before you are asked to sign off; a failure goes back to the builder.",
+              "label": "Wait for CI"
+            }
+          ]
+        },
+        {
+          "id": "release",
+          "fields": [
+            {
+              "path": "stage.release.strategy",
+              "type": "enum",
+              "options": [
+                "squash",
+                "merge",
+                "rebase"
+              ],
+              "default": "squash",
+              "help": "squash: one commit. merge: a merge commit. rebase: keep every commit. The branch is rebased onto the base and checked again first.",
+              "label": "How it lands"
+            },
+            {
+              "path": "stage.release.message",
+              "type": "string",
+              "placeholders": [
+                "title",
+                "id",
+                "branch"
+              ],
+              "default": "{title} (task-{id})",
+              "help": "For squash and merge commits. Placeholders: {title}, {id}, {branch}.",
+              "label": "Commit message"
+            },
+            {
+              "path": "stage.release.delete_branch",
+              "type": "bool",
+              "default": true,
+              "help": "Remove the task branch once it has landed.",
+              "label": "Delete the branch after merging"
+            },
+            {
+              "path": "stage.release.cleanup_worktree",
+              "type": "bool",
+              "default": true,
+              "help": "Delete the task's own copy of the code once it has landed.",
+              "label": "Remove the checkout after merging"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

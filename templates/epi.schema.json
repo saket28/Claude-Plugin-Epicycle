@@ -1,0 +1,502 @@
+{
+  "version": 2,
+  "tabs": [
+    {
+      "id": "global",
+      "title": "Global",
+      "sections": [
+        {
+          "id": "workflow",
+          "title": "Workflow",
+          "fields": [
+            {
+              "path": "global.workflow.name",
+              "type": "enum",
+              "options": [
+                "sdlc"
+              ],
+              "allow_custom": true,
+              "help": "Which workflow this repo's tasks follow (a folder in the plugin's workflows/).",
+              "label": "Workflow",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "pipeline",
+          "title": "Agents",
+          "fields": [
+            {
+              "path": "global.pipeline.critical_thinking",
+              "type": "enum",
+              "value_type": "int",
+              "options": [
+                0,
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "option_labels": {
+                "0": "Off",
+                "1": "Flag",
+                "2": "Check",
+                "3": "Challenge",
+                "4": "Sceptical",
+                "5": "Adversarial"
+              },
+              "help": "How hard agents question their instructions before acting. Each agent can set its own. Higher levels cost more tokens and rounds.",
+              "label": "Critical thinking",
+              "level": "basic"
+            },
+            {
+              "path": "global.pipeline.judge_model",
+              "type": "enum",
+              "options": [
+                "haiku",
+                "sonnet",
+                "opus"
+              ],
+              "help": "The small model that sorts review findings into blocking and notes and writes learnings.",
+              "label": "Cheap model",
+              "level": "advanced"
+            },
+            {
+              "path": "global.pipeline.agent_attempts",
+              "type": "int",
+              "min": 1,
+              "help": "How many times an agent is started for a step when it does not write its report, before the task fails.",
+              "label": "Agent retries",
+              "level": "advanced"
+            },
+            {
+              "path": "global.pipeline.nits_block",
+              "type": "bool",
+              "help": "Treat notes (minor findings) as blocking, so they must be settled before a stage passes.",
+              "label": "Notes block a stage",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "learning",
+          "title": "Learning",
+          "fields": [
+            {
+              "path": "global.learning.mode",
+              "type": "enum",
+              "options": [
+                "auto",
+                "off"
+              ],
+              "help": "auto: after a task, new learnings and answers are written into the workflow's learnings.md. off: no learning.",
+              "label": "Learning",
+              "level": "basic"
+            },
+            {
+              "path": "global.learning.on",
+              "type": "list",
+              "item_options": [
+                "clean",
+                "helped",
+                "done",
+                "failed"
+              ],
+              "help": "Which task outcomes trigger learning, one per line: clean (finished with no extra round or person), helped (finished after extra rounds or a decision), done (both), failed.",
+              "label": "Learn after",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "repo",
+          "title": "Repository",
+          "fields": [
+            {
+              "path": "global.repo.base_branch",
+              "type": "string",
+              "help": "The branch tasks start from and merge into.",
+              "label": "Base branch",
+              "level": "advanced"
+            },
+            {
+              "path": "global.repo.branch_prefix",
+              "type": "string",
+              "help": "Start of every task branch, e.g. sdlc/ gives epi/task-12.",
+              "label": "Branch prefix",
+              "level": "advanced"
+            },
+            {
+              "path": "global.repo.branch_name",
+              "type": "string",
+              "placeholders": [
+                "prefix",
+                "id",
+                "slug"
+              ],
+              "help": "Name of a task branch. Placeholders: {prefix}, {id}, {slug} (the title as a short slug).",
+              "label": "Branch name",
+              "level": "advanced"
+            },
+            {
+              "path": "global.repo.work_dir",
+              "type": "string",
+              "help": "Where tasks keep their files on this machine (always kept out of git).",
+              "label": "Work folder",
+              "level": "advanced"
+            },
+            {
+              "path": "global.repo.worktree_dir",
+              "type": "string",
+              "help": "Where each task's own copy of the code goes; by default a folder next to the repo.",
+              "label": "Checkout folder",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "command",
+          "title": "Commands",
+          "fields": [
+            {
+              "path": "global.command.setup",
+              "type": "string",
+              "help": "Run once when a task's checkout is created, e.g. npm ci.",
+              "label": "Setup command",
+              "level": "basic"
+            },
+            {
+              "path": "global.command.timeout",
+              "type": "int",
+              "min": 1,
+              "help": "How long a command may run before it is stopped.",
+              "label": "Command time limit (seconds)",
+              "level": "advanced"
+            }
+          ],
+          "open": "string"
+        },
+        {
+          "id": "board",
+          "title": "Tasks",
+          "fields": [
+            {
+              "path": "global.board.adapter",
+              "type": "enum",
+              "options": [
+                "files"
+              ],
+              "allow_custom": true,
+              "help": "Local files, or a command your repo provides.",
+              "label": "Where tasks come from",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "budget",
+          "title": "Budget (tokens)",
+          "fields": [
+            {
+              "path": "global.budget.per_task",
+              "type": "int",
+              "min": 0,
+              "usage": "task",
+              "help": "The most tokens one task may use.",
+              "label": "Token budget per task",
+              "level": "basic",
+              "unit": "tokens"
+            },
+            {
+              "path": "global.budget.per_month",
+              "type": "int",
+              "min": 0,
+              "usage": "month",
+              "help": "The most tokens all tasks may use in a month.",
+              "label": "Token budget per month",
+              "level": "basic",
+              "unit": "tokens"
+            },
+            {
+              "path": "global.budget.orchestrate",
+              "type": "int",
+              "min": 0,
+              "help": "A cap for the Claude Code session that coordinates the agents.",
+              "label": "Coordinating session budget",
+              "level": "advanced",
+              "unit": "tokens"
+            },
+            {
+              "path": "global.budget.on_exceed",
+              "type": "enum",
+              "options": [
+                "escalate",
+                "warn"
+              ],
+              "help": "escalate: the task needs you. warn: only a warning.",
+              "label": "When a budget is reached",
+              "level": "advanced"
+            },
+            {
+              "path": "global.budget.warn_at",
+              "type": "float",
+              "min": 0,
+              "max": 1,
+              "help": "The share of a budget that triggers a warning (0.8 = 80%).",
+              "label": "Warn at",
+              "level": "advanced"
+            },
+            {
+              "path": "global.budget.context_window",
+              "type": "int",
+              "min": 1000,
+              "help": "How many tokens an agent's context window holds; each step shows how full it got against this.",
+              "label": "Context window",
+              "level": "advanced",
+              "unit": "tokens"
+            }
+          ]
+        },
+        {
+          "id": "dashboard",
+          "title": "Dashboard",
+          "fields": [
+            {
+              "path": "global.dashboard.stall_after",
+              "type": "int",
+              "min": 1,
+              "help": "Minutes without activity before a running task is marked as possibly stuck.",
+              "label": "Stalled after (minutes)",
+              "level": "advanced"
+            },
+            {
+              "path": "global.dashboard.activity",
+              "type": "int",
+              "min": 0,
+              "help": "How many recent events the board's activity feed lists; 0 hides the feed.",
+              "label": "Activity feed length",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "wait",
+          "title": "Waiting",
+          "fields": [
+            {
+              "path": "global.wait.interval",
+              "type": "int",
+              "min": 1,
+              "help": "Seconds between checks while waiting for CI or an approval.",
+              "label": "Check every (seconds)",
+              "level": "advanced"
+            },
+            {
+              "path": "global.wait.max_hours",
+              "type": "float",
+              "min": 0,
+              "help": "Hours to wait for CI or an approval before giving up.",
+              "label": "Give up after (hours)",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "guardrail",
+          "title": "Guardrails",
+          "fields": [
+            {
+              "path": "global.guardrail.protected_paths",
+              "type": "list",
+              "additive": true,
+              "help": "More paths agents may never change (added to the built-in list).",
+              "label": "Protected paths",
+              "level": "advanced"
+            },
+            {
+              "path": "global.guardrail.blocked_commands",
+              "type": "list",
+              "additive": true,
+              "help": "More shell commands agents may not run (added to the built-in list).",
+              "label": "Blocked commands",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "human",
+          "title": "People",
+          "open": "list",
+          "fields": [
+            {
+              "path": "global.human.approver",
+              "type": "list",
+              "help": "Who may sign off as the approver, one name per line. Empty means anyone.",
+              "label": "Approvers",
+              "level": "advanced"
+            }
+          ]
+        },
+        {
+          "id": "principle",
+          "title": "Principles",
+          "collection": "principles"
+        }
+      ]
+    },
+    {
+      "id": "stage",
+      "title": "Workflow",
+      "dynamic": "stages",
+      "fields": [
+        {
+          "key": "rounds",
+          "type": "int",
+          "min": 1,
+          "max": 10,
+          "help": "How many times the stage may do its work and be checked (Do, Verify, Review). Each round raises issues and the next one fixes them. Issues still open after the last round need you.",
+          "label": "Rounds"
+        },
+        {
+          "key": "budget_tokens",
+          "type": "int",
+          "min": 0,
+          "help": "The most tokens this stage may use. Empty means the budget of the task.",
+          "label": "Token budget",
+          "unit": "tokens"
+        },
+        {
+          "key": "requirements",
+          "type": "list",
+          "help": "Added to the briefs of this stage's agents, one per line (for example a section every spec needs).",
+          "label": "Extra requirements"
+        }
+      ]
+    },
+    {
+      "id": "agent",
+      "title": "Agents",
+      "dynamic": "agents",
+      "fields": [
+        {
+          "key": "model",
+          "type": "enum",
+          "options": [
+            "opus",
+            "sonnet",
+            "haiku",
+            "fable",
+            "inherit"
+          ],
+          "help": "The model this agent or skill uses. Empty means the model in the agent's own file.",
+          "label": "Model",
+          "applies": {
+            "kind": [
+              "agent",
+              "skill"
+            ]
+          }
+        },
+        {
+          "key": "critical_thinking",
+          "type": "enum",
+          "value_type": "int",
+          "options": [
+            0,
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "option_labels": {
+            "0": "Off",
+            "1": "Flag",
+            "2": "Check",
+            "3": "Challenge",
+            "4": "Sceptical",
+            "5": "Adversarial"
+          },
+          "inherits": "global.pipeline.critical_thinking",
+          "help": "How hard it questions its instructions. Empty follows the global setting.",
+          "label": "Critical thinking",
+          "applies": {
+            "kind": [
+              "agent"
+            ]
+          }
+        },
+        {
+          "key": "effort",
+          "type": "enum",
+          "options": [
+            "low",
+            "medium",
+            "high",
+            "xhigh",
+            "max"
+          ],
+          "help": "How hard a skill such as code-review looks in its first round.",
+          "label": "Effort",
+          "applies": {
+            "kind": [
+              "skill"
+            ]
+          }
+        },
+        {
+          "key": "recheck",
+          "type": "enum",
+          "options": [
+            "threads",
+            "full"
+          ],
+          "help": "From round 2 a review skill only answers its open threads against what changed (threads, one small call), or reviews everything again (full).",
+          "label": "Later rounds",
+          "applies": {
+            "kind": [
+              "skill"
+            ]
+          }
+        },
+        {
+          "key": "writes",
+          "type": "enum",
+          "options": [
+            "output",
+            "worktree",
+            "paths"
+          ],
+          "help": "Only its report, anywhere in the task's checkout except protected paths, or only the paths listed below.",
+          "label": "Can write",
+          "applies": {
+            "kind": [
+              "agent"
+            ]
+          }
+        },
+        {
+          "key": "paths",
+          "type": "list",
+          "help": "Paths (globs) it may write to, one per line.",
+          "label": "Writable paths",
+          "applies": {
+            "kind": [
+              "agent"
+            ],
+            "writes": [
+              "paths"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "id": "learnings",
+      "title": "Learnings",
+      "learnings": true,
+      "sections": []
+    }
+  ]
+}

@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Epicycle</title>
+<style>
+  :root { --bg:#f7f7f5; --panel:#fff; --ink:#1d1d1b; --muted:#6b6b66; --line:#e4e4df; --accent:#3b5bdb;
+          --pass:#2f9e44; --changes:#e8590c; --fail:#c92a2a; --wait:#f08c00; --chip:#f1f1ee; --needs:#d6336c; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#161615; --panel:#1f1f1d; --ink:#ecece8; --muted:#9a9a93; --line:#33332f; --chip:#2a2a27; }
+  }
+  #offline { position:sticky; top:0; z-index:50; background:var(--fail); color:#fff; padding:8px 20px; font-weight:500; }
+  .steps { display:flex; gap:3px; margin-top:6px; }
+  .steps i { width:10px; height:10px; border-radius:2px; border:1px solid var(--line); }
+  .steps i.pass { background:var(--pass); border-color:var(--pass); } .steps i.changes { background:var(--changes); border-color:var(--changes); }
+  .steps i.running { background:var(--wait); border-color:var(--wait); animation:pulse 1.6s ease-in-out infinite; }
+  .steps i.skipped { opacity:.35; border-style:dashed; }
+  @keyframes pulse { 50% { opacity:.45; } }
+  #feed { margin-bottom:10px; font-size:12px; }
+  #feed summary { cursor:pointer; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; font-weight:600; }
+  #feed-list { max-height:150px; overflow:auto; }
+  #feed a { display:flex; gap:8px; padding:2px 0; cursor:pointer; } #feed a:hover { text-decoration:underline; }
+  #feed a span { color:var(--muted); white-space:nowrap; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:24px; padding:14px 20px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; font-weight:600; }
+  nav button { background:none; border:0; padding:6px 10px; color:var(--muted); font:inherit; cursor:pointer; border-radius:6px; }
+  nav button.on { color:var(--ink); background:var(--chip); }
+  .meter { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:12px; margin-left:auto; }
+  .bar { width:140px; height:6px; background:var(--chip); border-radius:3px; overflow:hidden; }
+  .bar i { display:block; height:100%; background:var(--accent); }
+  .bar i.warn { background:var(--wait); } .bar i.over { background:var(--fail); }
+  main { padding:16px 20px; }
+  .muted { color:var(--muted); }
+  .small { font-size:12px; }
+  /* needs-you strip */
+  .strip { border:1px solid var(--needs); border-radius:8px; padding:8px 12px; margin-bottom:12px; background:rgba(214,51,108,.06); }
+  .strip h2 { margin:0 0 4px; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--needs); display:flex; align-items:center; gap:6px; }
+  .strip a { display:flex; gap:8px; align-items:center; padding:3px 0; cursor:pointer; }
+  .strip a:hover { text-decoration:underline; }
+  .ico { display:inline-flex; vertical-align:middle; color:var(--needs); }
+  .ico svg { width:15px; height:15px; }
+  /* board */
+  .board { display:grid; gap:10px; }
+  .col { background:var(--chip); border-radius:10px; padding:8px; align-self:start; min-height:44px; }
+  .col.empty { padding:6px 8px; opacity:.75; }
+  .col h2 { font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:2px 4px 8px; font-weight:600; }
+  .col.empty h2 { margin-bottom:2px; }
+  .col .count { font-weight:400; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:8px; cursor:pointer; box-shadow:0 1px 2px rgba(0,0,0,.08); }
+  .card:hover { border-color:var(--accent); }
+  .card.needs { border:2px solid var(--needs); padding:9px; }
+  .card.bl { border-left:3px solid var(--line); }
+  .card.bl.high { border-left-color:var(--fail); } .card.bl.medium { border-left-color:var(--wait); } .card.bl.low { border-left-color:var(--pass); }
+  .card .d { color:var(--muted); font-size:12px; margin-top:4px; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .card .t { font-weight:500; margin:2px 0 4px; overflow:hidden; text-overflow:ellipsis; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; }
+  .card .id { color:var(--muted); font-size:12px; display:flex; align-items:center; gap:6px; }
+  .card .status { font-size:12px; color:var(--muted); }
+  .card.needs .status { color:var(--needs); font-weight:500; }
+  .stale { color:var(--wait); font-weight:500; }
+  .tok { height:4px; background:var(--chip); border-radius:2px; overflow:hidden; margin-top:6px; }
+  .tok i { display:block; height:100%; background:var(--accent); }
+  .tok i.warn { background:var(--wait); } .tok i.over { background:var(--fail); }
+  .addcard, .more { width:100%; text-align:left; background:none; border:0; color:var(--muted); padding:6px 4px; font:inherit; cursor:pointer; border-radius:6px; }
+  .addcard:hover, .more:hover { background:var(--line); color:var(--ink); }
+  /* buttons, forms */
+  button.primary { background:var(--accent); color:#fff; border:0; padding:7px 14px; border-radius:6px; font:inherit; cursor:pointer; }
+  button.secondary { background:var(--chip); color:var(--ink); border:0; padding:7px 14px; border-radius:6px; font:inherit; cursor:pointer; }
+  button.danger { background:none; color:var(--fail); border:0; padding:7px 10px; font:inherit; cursor:pointer; }
+  button.small { padding:3px 10px; font-size:12px; }
+  .form label { display:block; font-size:12px; color:var(--muted); margin:12px 0 4px; }
+  .form input, .form textarea, .form select, textarea.note { width:100%; font:inherit; padding:6px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); }
+  .form textarea { min-height:160px; resize:vertical; }
+  textarea.note { min-height:70px; margin:8px 0; }
+  .actions { position:sticky; bottom:0; background:var(--bg); padding:12px 0; display:flex; gap:8px; align-items:center; }
+  .form .actions { position:static; background:none; }
+  .err { color:var(--fail); font-size:12px; }
+  /* chips */
+  .chip { font-size:11px; padding:1px 7px; border-radius:10px; background:var(--chip); color:var(--muted); white-space:nowrap; }
+  .chip.pass { color:#fff; background:var(--pass); } .chip.changes { color:#fff; background:var(--changes); }
+  .chip.needs { color:#fff; background:var(--needs); } .chip.open { color:#fff; background:var(--accent); }
+  .chip.tag { background:rgba(214,51,108,.12); color:var(--needs); }
+  /* drawer */
+  #drawer { position:fixed; top:0; right:0; width:min(720px, 100%); height:100%; background:var(--panel); border-left:1px solid var(--line);
+            box-shadow:-8px 0 24px rgba(0,0,0,.08); transform:translateX(100%); transition:transform .15s; overflow:auto; padding:20px; }
+  #drawer.open { transform:none; }
+  #drawer .close { float:right; cursor:pointer; border:0; background:none; font-size:20px; color:var(--muted); }
+  #drawer h2.title { font-size:18px; font-weight:600; margin:0 0 4px; }
+  #drawer h3 { font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); margin:20px 0 8px; font-weight:600; }
+  .status-line { color:var(--muted); }
+  .status-line.needs { color:var(--needs); font-weight:500; }
+  .decision { border:2px solid var(--needs); border-radius:8px; padding:12px 14px; margin:14px 0; }
+  #drawer .decision h3 { margin:0 0 6px; color:var(--needs); }
+  .decision .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+  .decision .done { color:var(--pass); }
+  details.row { border-top:1px solid var(--line); }
+  details.row > summary { cursor:pointer; padding:6px 0; list-style:none; display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  details.row > summary::-webkit-details-marker { display:none; }
+  details.row > summary::before { content:"▸"; color:var(--muted); font-size:11px; width:10px; }
+  details.row[open] > summary::before { content:"▾"; }
+  details.row > .in { padding:0 0 8px 18px; }
+  details.row details.row { border-top:0; }
+  .ok { color:var(--pass); } .run { color:var(--accent); } .todo { color:var(--muted); }
+  .line { margin:3px 0; font-size:13px; } .line b { font-weight:600; }
+  .line.pushback b { color:var(--changes); } .line.dir { color:var(--muted); }
+  .kv { display:grid; grid-template-columns:110px 1fr; gap:4px 10px; font-size:13px; }
+  .kv dt { color:var(--muted); } .kv dd { margin:0; word-break:break-word; }
+  pre.md { white-space:pre-wrap; background:var(--chip); padding:12px; border-radius:6px; font:12px/1.5 ui-monospace, Menlo, monospace; max-height:420px; overflow:auto; }
+  .diag { font-size:12px; color:var(--muted); margin:4px 0; }
+  .alert { display:flex; gap:8px; align-items:flex-start; padding:6px 8px; border-radius:6px; background:var(--chip); margin:4px 0; font-size:13px; }
+  .alert .x { margin-left:auto; cursor:pointer; color:var(--muted); background:none; border:0; font:inherit; }
+  .md { font-size:14px; line-height:1.55; }
+  .md h1 { font-size:20px; margin:0 0 10px; } .md h2 { font-size:16px; margin:22px 0 8px; } .md h3 { font-size:14px; margin:16px 0 6px; }
+  .md code { background:rgba(127,127,127,.15); padding:1px 5px; border-radius:4px; font-size:12.5px; }
+  .md pre { background:rgba(127,127,127,.12); padding:10px 12px; border-radius:6px; overflow:auto; } .md pre code { background:none; padding:0; }
+  .md table { border-collapse:collapse; margin:10px 0; font-size:13px; } .md th, .md td { border:1px solid rgba(127,127,127,.3); padding:5px 9px; text-align:left; vertical-align:top; }
+  .md th { background:rgba(127,127,127,.12); } .md ul, .md ol { padding-left:22px; margin:6px 0; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:5px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; }
+  .rv-err { color:#e5484d; } .rv-file { font-family:ui-monospace,Menlo,monospace; font-size:12px; } .rv-errtext { color:#e5484d; margin-left:6px; }
+  .rv-act { white-space:nowrap; }
+  .rv-act a, .entry .ia { margin-left:6px; color:var(--muted); cursor:pointer; display:inline-flex; vertical-align:middle; }
+  .rv-act a:first-child { margin-left:0; }
+  .rv-act a:hover, .entry .ia:hover { color:var(--accent); }
+  .ia.del:hover, .rv-act a.del:hover { color:#e5484d !important; }
+  .entry { display:flex; gap:8px; align-items:flex-start; padding:4px 0; font-size:13px; }
+  .entry code { color:var(--muted); }
+  .entry textarea, .entry input { font:inherit; font-size:13px; }
+  /* settings */
+  .group { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; margin-bottom:12px; }
+  .group h3 { margin:0 0 10px; font-size:14px; }
+  .field { display:grid; grid-template-columns:240px 1fr; gap:10px; padding:6px 0; align-items:start; }
+  .field > label { font-size:13px; padding-top:6px; }
+  .field .help { color:var(--muted); font-size:12px; margin-top:3px; }
+  .field input[type=number] { width:160px; }
+  .field input, .field select, .field textarea { width:100%; font:inherit; padding:5px 8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); }
+  .field.changed input, .field.changed select, .field.changed textarea { border-color:var(--accent); }
+  .field .unit { color:var(--muted); font-size:12px; margin-left:6px; }
+  .ov { font-size:10px; color:var(--accent); margin-left:6px; }
+  .subtabs { display:flex; gap:2px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+  .subtabs button { background:none; border:0; border-bottom:2px solid transparent; padding:7px 12px; color:var(--muted); font:inherit; cursor:pointer; }
+  .subtabs button.on { color:var(--ink); border-bottom-color:var(--accent); }
+  .subtabs button.dirty::after { content:" \2022"; color:var(--accent); }
+  .diff { font:12px/1.5 ui-monospace, Menlo, monospace; white-space:pre-wrap; background:var(--chip); padding:10px; border-radius:6px; }
+  .diff .add { color:var(--pass); } .diff .del { color:var(--fail); }
+  /* workflow tab */
+  .flow { display:flex; gap:12px; align-items:flex-start; overflow-x:auto; padding-bottom:12px; }
+  .stage { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; min-width:250px; flex:1 0 250px; }
+  .stage > h3 { margin:0 0 2px; font-size:15px; }
+  .stage .sets { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; font-size:12px; color:var(--muted); }
+  .stage .sets label { display:flex; align-items:center; gap:4px; }
+  .stage .sets input { width:84px; font:inherit; padding:2px 5px; border:1px solid var(--line); border-radius:5px; background:var(--bg); color:var(--ink); }
+  .stage .sets input.changed { border-color:var(--accent); }
+  .phase { margin-top:10px; }
+  .row > .in > h4 { margin:8px 0 2px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; }
+  .phase h4 { margin:0 0 4px; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  .wstep { display:flex; align-items:center; gap:8px; padding:5px 6px; border-radius:6px; }
+  .wstep:hover { background:var(--chip); }
+  .wstep.off .name { color:var(--muted); text-decoration:line-through; }
+  .wstep .name { flex:1; }
+  .wstep .name.link { cursor:pointer; } .wstep .name.link:hover { color:var(--accent); }
+  .wstep .kind { font-size:11px; color:var(--muted); }
+  .sw { position:relative; width:30px; height:17px; flex:none; }
+  .sw input { opacity:0; width:100%; height:100%; margin:0; position:absolute; cursor:pointer; }
+  .sw span { position:absolute; inset:0; background:var(--line); border-radius:9px; transition:background .1s; pointer-events:none; }
+  .sw span::after { content:""; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%; background:#fff; transition:left .1s; }
+  .sw input:checked + span { background:var(--pass); } .sw input:checked + span::after { left:15px; }
+  .wstep .ia { color:var(--muted); cursor:pointer; display:inline-flex; }
+  .wstep .ia:hover { color:var(--accent); } .wstep .ia.del:hover { color:#e5484d; }
+  .wstep .tools { display:flex; gap:4px; opacity:.55; min-width:56px; justify-content:flex-end; } .wstep:hover .tools { opacity:1; }
+  .banner { display:flex; align-items:center; gap:10px; padding:8px 12px; margin-bottom:12px; background:var(--chip); border:1px solid var(--line); border-radius:8px; font-size:13px; }
+  .banner > span { flex:1; }
+  .addstep { margin-top:8px; }
+  .addform { margin-top:6px; padding:8px; background:var(--chip); border-radius:6px; display:grid; gap:6px; }
+  .addform input, .addform select { font:inherit; padding:4px 6px; border:1px solid var(--line); border-radius:5px; background:var(--bg); color:var(--ink); width:100%; }
+  .rules { width:100%; font:12px/1.5 ui-monospace, Menlo, monospace; padding:8px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--ink); box-sizing:border-box; }
+  @media (max-width: 700px) { .field { grid-template-columns:1fr; } main { padding:12px; } }
+</style>
+</head>
+<body>
+<div id="offline" hidden></div>
+<header>
+  <h1 id="repo">Epicycle</h1>
+  <nav><button id="tab-board" class="on">Board</button><button id="tab-settings">Settings</button><button id="tab-help">Help</button></nav>
+  <div class="meter"><span id="month-label">Month</span><div class="bar"><i id="month-bar"></i></div></div>
+</header>
+<main id="board-view">
+  <div id="strip"></div>
+  <div class="muted small" id="trends" style="margin-bottom:10px"></div>
+  <details id="feed" hidden><summary>Activity</summary><div id="feed-list"></div></details>
+  <div class="board" id="board"></div>
+</main>
+<main id="settings-view" class="settings" hidden></main>
+<main id="help-view" hidden><div id="help-text" class="md"></div></main>
+<aside id="drawer"><button class="close" onclick="closeDrawer()">×</button><div id="drawer-body"></div></aside>
+<script>
+
+const TOKEN = new URLSearchParams(location.search).get("token");
+const H = {"X-Epi-Token": TOKEN, "Content-Type": "application/json"};
+const api = (p, opts={}) => fetch(p, {...opts, headers: H}).then(async r => {
+  const t = r.headers.get("Content-Type") || ""; const body = t.includes("json") ? await r.json() : await r.text();
+  if (!r.ok) throw Object.assign(new Error(body.error || r.statusText), {status: r.status}); return body; });
+const post = (p, body) => api(p, {method: "POST", body: JSON.stringify(body)});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmt = n => n >= 1e6 ? (n/1e6).toFixed(1).replace(/\.0$/, "")+"M" : n >= 1e3 ? Math.round(n/1e3)+"k" : String(n||0);
+const dur = s => s == null ? "" : s < 90 ? s+"s" : s < 5400 ? Math.round(s/60)+"m" : (s/3600).toFixed(1)+"h";
+const ALERT_ICON = '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1.5 15 14H1z" fill="currentColor"/><path d="M8 6v4M8 11.6v.9" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/></svg>';
+const alertIcon = `<span class="ico" title="Needs you">${ALERT_ICON}</span>`;
+const EDIT_ICON = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M11 2.5l2.5 2.5L5.5 13H3v-2.5z"/></svg>';
+const DEL_ICON = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 8.5h6.6l.7-8.5"/></svg>';
+let LABELS = {};
+
+function meter(el, used, limit) {
+  const f = limit ? used/limit : 0; el.style.width = Math.min(100, f*100)+"%";
+  el.className = f >= 1 ? "over" : f >= .8 ? "warn" : "";
+}
+
+/* ---------------- Board ---------------- */
+let BACKLOG = [], SHOW_ALL_DONE = false;
+const DONE_SHOWN = 4;
+function blCard(x) {
+  return `<div class="card bl ${esc(x.priority)}" onclick="openBacklog('${esc(x.id)}')">
+    <div class="id">${/^\d+$/.test(x.id) ? "task-" : ""}${esc(x.id)}${x.priority ? " · " + esc(x.priority) : ""}</div>
+    <div class="t">${esc(x.title)}</div>
+    ${x.description ? `<div class="d">${esc(x.description)}</div>` : ""}</div>`;
+}
+function openBacklog(id) {
+  const x = BACKLOG.find(i => i.id === id) || {title:"", description:"", priority:"", created:""};
+  const opt = v => `<option value="${v}" ${x.priority===v?"selected":""}>${v||"none"}</option>`;
+  document.getElementById("drawer-body").innerHTML = `<div class="form">
+    <h2 class="title">${id ? (/^\d+$/.test(id) ? "task-" : "Backlog item ") + esc(id) : "New backlog item"}</h2>
+    ${x.created ? `<div class="muted">Added ${esc(new Date(x.created).toLocaleString())} · not started. Run <code>/epi:start ${esc(id)}</code> to begin.</div>` : ""}
+    <label>Title</label><input id="bl-title" value="${esc(x.title)}">
+    <label>Description</label><textarea id="bl-desc" placeholder="What should be built? Acceptance criteria, links, constraints...">${esc(x.description)}</textarea>
+    <label>Priority</label><select id="bl-pri">${["","low","medium","high"].map(opt).join("")}</select>
+    <div class="actions"><button class="primary" onclick="saveBacklog('${esc(id||"")}')">Save</button>
+      <button class="secondary" onclick="closeDrawer()">Cancel</button>
+      ${id ? `<button class="danger" style="margin-left:auto" onclick="delBacklog('${esc(id)}')">Delete</button>` : ""}</div>
+    <div class="err" id="bl-err"></div></div>`;
+  document.getElementById("drawer").classList.add("open");
+}
+async function postBacklog(body) {
+  try { await post("/api/backlog", body); closeDrawer(); loadBoard(); }
+  catch (e) { document.getElementById("bl-err").textContent = e.message; }
+}
+const saveBacklog = id => postBacklog({action: id ? "update" : "add", id,
+  title: document.getElementById("bl-title").value, description: document.getElementById("bl-desc").value,
+  priority: document.getElementById("bl-pri").value});
+const delBacklog = id => confirm("Delete this backlog item?") && postBacklog({action:"delete", id});
+
+function cardHtml(j) {
+  const r = j.budget ? j.tokens/j.budget : 0, f = Math.min(100, r*100), level = r >= 1 ? "over" : r >= WARN_AT ? "warn" : "";
+  const round = j.round > 1 && !["done", "cancelled", "queued"].includes(j.status) ? ` · round ${j.round}` : "";
+  return `<div class="card${j.needs_you ? " needs" : ""}" onclick="openTask('${esc(j.id)}')">
+    <div class="id">task-${esc(j.id)}${round}${j.needs_you ? alertIcon : ""}</div>
+    <div class="t">${esc(j.title)}</div>
+    ${stepsHtml(j.strip)}
+    <div class="status">${esc(j.text)}${j.stalled ? ` · <span class="stale">no activity for ${j.quiet_minutes} min</span>` : ""}</div>
+    <div class="tok" title="${fmt(j.tokens)} of ${fmt(j.budget)} tokens"><i class="${level}" style="width:${f}%"></i></div></div>`;
+}
+function stepsHtml(strip) {
+  return strip && strip.length ? `<div class="steps">${strip.map(s => `<i class="${s.state}" title="${esc(s.label)}: ${s.state === "skipped" ? "left out" : s.state === "todo" ? "waiting" : s.state}"></i>`).join("")}</div>` : "";
+}
+const hhmm = ts => { const d = new Date(ts); return isNaN(d) ? "" : d.toLocaleTimeString([], {hour: "2-digit", minute: "2-digit", hour12: false}); };
+function feedHtml(list) {
+  return (list || []).map(a => `<a onclick="openTask('${esc(a.task)}')"><span>${hhmm(a.ts)}</span><span>task-${esc(a.task)}</span>${esc(a.text)}</a>`).join("");
+}
+function setFeed(list, hidden) {
+  const f = document.getElementById("feed");
+  f.hidden = hidden;
+  document.getElementById("feed-list").innerHTML = feedHtml(list);
+}
+try { document.getElementById("feed").open = localStorage.getItem("epi.feed") === "1"; } catch (e) {}
+document.getElementById("feed").addEventListener("toggle", e => { try { localStorage.setItem("epi.feed", e.target.open ? "1" : "0"); } catch (x) {} });
+function offlineText(e) {
+  return e && e.status === 403 ? "The dashboard token was refused. Open the link from /epi:dashboard again." : "Lost connection to the dashboard server. Retrying…";
+}
+function setOffline(e) {
+  const b = document.getElementById("offline");
+  b.hidden = !e; if (e) b.textContent = offlineText(e);
+}
+function stripHtml(list) {
+  if (!list || !list.length) return "";
+  return `<div class="strip"><h2>${alertIcon} Needs you</h2>${list.map(n =>
+    `<a onclick="openTask('${esc(n.task)}')">${esc(n.text)}</a>`).join("")}</div>`;
+}
+function boardHtml(b, showAllDone) {
+  const active = b.tasks.filter(j => j.status !== "cancelled");
+  const cols = b.columns.map(c => {
+    const all = active.filter(j => (j.status === "done" ? "done" : j.stage) === c);
+    const js = c === "done" && !showAllDone ? all.slice(-DONE_SHOWN).reverse() : c === "done" ? all.slice().reverse() : all;
+    const q = c === "queued";
+    const n = all.length + (q ? b.backlog_items.length : 0);
+    const more = c === "done" && all.length > DONE_SHOWN
+      ? `<button class="more" onclick="SHOW_ALL_DONE=!SHOW_ALL_DONE;loadBoard()">${showAllDone ? "Show fewer" : "Show all " + all.length}</button>` : "";
+    const extra = q ? b.backlog_items.map(blCard).join("") + `<button class="addcard" onclick="openBacklog()">+ Add a card</button>` : "";
+    return {empty: n === 0 && !q, html: `<div class="col${n === 0 && !q ? " empty" : ""}"><h2>${esc(b.labels[c])} <span class="count">${n}</span></h2>${js.map(cardHtml).join("")}${more}${extra}</div>`};
+  });
+  const widths = cols.map(c => c.empty ? "minmax(84px, .35fr)" : "minmax(180px, 1fr)").join(" ");
+  return {widths, html: cols.map(c => c.html).join("")};
+}
+let LAST_BOARD = "", WARN_AT = 1;              // the share of a budget that warns: global.budget.warn_at, from the board
+async function loadBoard() {
+  const b = await api("/api/board");
+  const key = JSON.stringify(b);
+  if (key === LAST_BOARD) return;                 // nothing changed: leave the page alone
+  LAST_BOARD = key; WARN_AT = b.warn_at;
+  document.getElementById("repo").textContent = b.repo;
+  document.title = b.repo + " Epicycle";
+  document.getElementById("month-label").textContent = `Month ${fmt(b.month.tokens)} / ${fmt(b.month.budget)}`;
+  meter(document.getElementById("month-bar"), b.month.tokens, b.month.budget);
+  const t = b.trends;
+  document.getElementById("trends").textContent = t.tasks ?
+    `Last ${t.tasks} done: avg ${fmt(t.avg_tokens)} tokens per task · ${Math.round(t.first_pass*100)}% went through first time, without help` : "";
+  LABELS = b.labels; BACKLOG = b.backlog_items;
+  document.getElementById("strip").innerHTML = stripHtml(b.needs_you);
+  setFeed(b.activity, !(b.activity || []).length);
+  const v = boardHtml(b, SHOW_ALL_DONE);
+  document.getElementById("board").style.gridTemplateColumns = v.widths;
+  document.getElementById("board").innerHTML = v.html;
+}
+
+/* ---------------- Task drawer: summary first, details on click ---------------- */
+const VERDICT = {PASS: ["pass", "Passed"], CHANGES: ["changes", "Changes needed"], FAIL: ["changes", "Failed"], ACCEPTED: ["pass", "Accepted as is"], WAITING: ["needs", "Waiting for your sign-off"]};
+const vchip = v => VERDICT[v] ? `<span class="chip ${VERDICT[v][0]}">${VERDICT[v][1]}</span>` : "";
+const lineHtml = x => x.type === "decision"
+  ? `<div class="line dir"><b>note</b>: ${esc(x.text)}</div>`
+  : `<div class="line ${esc(x.type)}"><b>${esc(x.from)}</b> <span class="muted">to ${esc(x.to || "you")}, ${esc(x.type)}</span>: ${esc(x.text)}${x.detail ? ` <span class="muted">${esc(x.detail)}</span>` : ""}</div>`;
+const STATE_CHIP = {needs_you: '<span class="chip needs">Needs a decision</span>', open: '<span class="chip open">In progress</span>',
+                    noted: '<span class="chip">Note</span>', sent_back: '<span class="chip open">Sent back</span>', closed: '<span class="chip pass">Resolved</span>'};
+function issueHtml(i, hideState) {
+  const tags = (i.tags || []).map(t => `<span class="chip tag">${esc(t)}</span>`).join(" ");
+  const state = hideState ? "" : i.state === "sent_back" ? `<span class="chip open">Sent back, waiting for ${esc(i.waiting_for)}</span>` : STATE_CHIP[i.state] || "";
+  return `<details class="row"><summary><span>${esc(i.by)}: ${esc(i.title)}</span> ${tags} ${state}${i.round ? `<span class="muted small">${esc(i.stage)} round ${i.round}</span>` : ""}</summary>
+    <div class="in">${i.lines.map(lineHtml).join("")}</div></details>`;
+}
+/* a disagreement row: who says what, no expanding needed to see both sides */
+function disputeHtml(i) {
+  const side = (who, text) => text ? `<div class="line"><b>${esc(who)}</b>: ${esc(text)}</div>` : "";
+  return `<div class="row dispute"><div><b>${esc(i.title)}</b> ${(i.tags || []).map(t => `<span class="chip tag">${esc(t)}</span>`).join(" ")}</div>
+    ${side((i.by_label || i.by) + " says", i.claim)}${side((i.reply_by || "the other side") + " replied", i.reply) || (i.failed ? "" : '<div class="line muted">No reply yet.</div>')}
+    <details class="row"><summary class="small muted">Full thread</summary><div class="in">${i.lines.map(lineHtml).join("")}</div></details></div>`;
+}
+
+const NOTE = {answer: "Your answers", send_back: "What should they do?"};
+function decisionHtml(j) {
+  const d = j.decision;
+  if (!d) return "";
+  const BTN = {accept: ["Accept as is", false, "primary"], send_back: ["Send back", true, "secondary"],
+               approve: ["Approve", false, "primary"], answer: ["Answer", true, "primary"], budget: ["Add 500k tokens", false, "primary"], retry: ["Try again", false, "primary"],
+               retry_task: ["Try again", false, "primary"]};
+  return `<div class="decision" id="decision"><h3>${esc(d.title)}</h3>
+    <div>${esc(d.text.charAt(0).toUpperCase() + d.text.slice(1))}</div>${d.explain ? `<div class="muted small">${esc(d.explain)}</div>` : ""}
+    ${d.issues.length ? `<div style="margin-top:8px">${d.issues.map(disputeHtml).join("")}</div>` : ""}
+    ${d.detail && !d.issues.length ? `<div class="muted small" style="margin-top:6px;white-space:pre-line">${esc(d.detail)}</div>` : ""}
+    <div class="btns">${d.actions.map(a => `<button class="${BTN[a][2]}" onclick="${BTN[a][1] ? `askNote('${a}')` : `decide('${esc(j.id)}','${a}')`}">${BTN[a][0]}</button>`).join("")}</div>
+    <div id="note-box" hidden>${(d.targets || []).length ? `<label class="small" id="to-row">Send to <select id="send-to">${d.targets.map(t => `<option value="${esc(t.value)}">${esc(t.label)}</option>`).join("")}</select></label>` : ""}<textarea class="note" id="note" placeholder=""></textarea><button class="primary" id="note-go">Send</button> <button class="secondary" onclick="document.getElementById('note-box').hidden=true">Cancel</button></div>
+    <div class="err" id="decide-err"></div></div>`;
+}
+function askNote(action) {
+  const labels = NOTE;
+  const box = document.getElementById("note-box"), ta = document.getElementById("note");
+  box.hidden = false; ta.placeholder = labels[action]; ta.value = ""; ta.focus();
+  const row = document.getElementById("to-row"); if (row) row.hidden = action !== "send_back";
+  NOTE_ACTION = action;
+  document.getElementById("note-go").onclick = () => decide(CURRENT_TASK, action, ta.value);
+}
+let NOTE_ACTION = null, LAST_TASK = "";
+let CURRENT_TASK = null;
+async function decide(task, action, note) {
+  const err = document.getElementById("decide-err"), to = document.getElementById("send-to");
+  try {
+    const r = await post("/api/task/" + action, {task, note, to: action === "send_back" && to ? to.value : undefined});
+    document.getElementById("decision").innerHTML = `<h3>Done</h3><div class="done">${esc(r.message)}</div><div style="margin-top:6px">${esc(r.next)}</div>`;
+    loadBoard(); LAST_TASK = "";
+  } catch (e) { err.textContent = e.message; }
+}
+
+function stepHtml(j, s, st, rd) {
+  const state = s.state === "done" ? vchip(s.verdict) || '<span class="chip">Done</span>'
+    : s.state === "left out" ? `<span class="chip">Left out</span>` : '<span class="chip">Waiting</span>';
+  const who = s.who ? `<div class="diag">${esc(s.who.agent || "")}${s.who.model ? " · " + esc(s.who.model) : ""}${s.who.tokens != null ? " · " + fmt(s.who.tokens) + " tokens" : ""}${s.who.cache_read ? " · " + fmt(s.who.cache_read) + " cached" : ""}${s.who.seconds != null ? " · " + dur(s.who.seconds) : ""}${s.who.context != null ? " · context " + Math.round(s.who.context*100) + "% full at most" : ""}</div>` : "";
+  const full = s.who && s.who.context >= WARN_AT ? contextChip(s.who.context) : "";
+  const found = (s.found || []).map(f => `<div class="line"><span class="muted">${esc(f.severity)}</span> ${esc(f.text)}</div>`).join("");
+  const why = s.reason ? `<div class="diag">${esc(s.reason)}</div>` : "";
+  const outs = (s.outcome ? `<div class="diag">${esc(s.outcome)}</div>` : "") + (s.outputs || []).map(o => `<div class="diag">${esc(o.name)} = ${esc(o.value)}${o.reused ? " · reused" : ""}</div>`).join("");
+  const body = `<div class="in">${why}${found}${outs}${who}${s.report ? `<div data-report="${esc(s.report)}"></div>` : ""}</div>`;
+  return `<details class="row"${s.report ? ` ontoggle="loadReport(this)"` : ""}><summary><span>${esc(s.label)}</span><span class="muted small">${esc(PHASE_LABEL[s.phase] || s.phase)}</span> ${state} ${full}</summary>${body}</details>`;
+}
+const PHASE_LABEL = {plan: "Plan", do: "Do", verify: "Verify", review: "Review", finalize: "Finalize", signoff: "Finish", finish: "Finish"};
+async function loadReport(el) {
+  if (!el.open) return;
+  const box = el.querySelector("[data-report]");
+  if (!box || box.dataset.loaded) return;
+  box.dataset.loaded = "1";
+  try { const t = await api(`/api/file?task=${encodeURIComponent(CURRENT_TASK)}&path=${encodeURIComponent(box.dataset.report)}`);
+    box.innerHTML = `<pre class="md">${esc(typeof t === "string" ? t : JSON.stringify(t))}</pre>`; }
+  catch (e) { box.textContent = e.message; }
+}
+const contextChip = c => `<span class="chip changes" title="An agent's context window got ${Math.round(c*100)}% full: consider splitting its step">Context ${Math.round(c*100)}%</span>`;
+function progressHtml(j) {
+  const MARK = {done: '<span class="ok">✓</span>', current: '<span class="run">⟳</span>', todo: '<span class="todo">·</span>', stopped: '<span class="todo">■</span>'};
+  return j.progress.map(s => {
+    const label = s.state === "current" && s.round ? ` <span class="muted">round ${s.round}</span>` : s.state === "done" && s.rounds_used > 1 ? ` <span class="muted">${s.rounds_used} rounds</span>` : "";
+    const meta = s.state === "todo" ? "" : `<span class="muted small">${[s.seconds != null ? dur(s.seconds) : "", s.tokens ? fmt(s.tokens) + " tokens" : ""].filter(Boolean).join(" · ")}</span>`;
+    const nOpen = [...j.conversation.needs_decision, ...j.conversation.in_progress].filter(i => i.stage === s.id).length;
+    const rounds = s.rounds.map(r => `<details class="row"><summary><span>Round ${r.number}</span> ${vchip(r.verdict)}${r.extra ? ' <span class="chip">extra round</span>' : ""}${r.final ? ' <span class="chip">your instructions</span>' : ""}${r.reason ? `<span class="muted small">${esc(r.reason)}</span>` : ""}</summary>
+      <div class="in">${r.steps.filter(x => x.state !== "waiting" || s.state === "current").map(x => stepHtml(j, x, s, r)).join("") || '<span class="muted">Nothing yet</span>'}</div></details>`).join("");
+    const issues = stageIssues(j, s.id);
+    const ctx = Math.max(0, ...s.rounds.flatMap(r => r.steps.map(x => (x.who && x.who.context) || 0)));
+    return `<details class="row"${s.state === "current" ? " open" : ""}><summary>${MARK[s.state]} <b>${esc(s.name)}</b>${label} ${vchip(s.verdict)}${ctx >= WARN_AT ? " " + contextChip(ctx) : ""}${nOpen ? ` <span class="chip open">${nOpen} open issue${nOpen > 1 ? "s" : ""}</span>` : ""} ${meta}</summary><div class="in">${issues ? `<h4>Issues</h4>${issues}<h4>Rounds</h4>` : ""}${rounds || '<span class="muted">Not started</span>'}</div></details>`;
+  }).join("");
+}
+/* the issues of one stage: they span its rounds (raised in one, answered and closed in a later one) */
+function stageIssues(j, sid) {
+  const c = j.conversation, all = k => c[k].filter(i => i.stage === sid);
+  const open = [...all("needs_decision"), ...all("in_progress")], done = all("resolved"), notes = all("notes");
+  if (!open.length && !done.length && !notes.length) return "";
+  const group = (list, title) => list.length ? `<details class="row"><summary>${title} (${list.length})</summary><div class="in">${list.map(i => issueHtml(i)).join("")}</div></details>` : "";
+  return `<div class="issues">${open.map(i => issueHtml(i)).join("")}${group(done, "Resolved")}${group(notes, "Notes")}</div>`;
+}
+function detailsHtml(j) {
+  const d = j.details;
+  const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : "";
+  const alerts = d.alerts.map(a => `<div class="alert"><span>${esc(a.text)} <small class="muted">${esc(a.ts ? new Date(a.ts).toLocaleString() : "")}</small></span><button class="x" title="Clear" onclick="clearAlerts('${esc(j.id)}', ['${esc(a.id)}'])">×</button></div>`).join("");
+  const problems = d.problems.map(e => `<tr><td>${esc(e.type)}</td><td class="muted">${esc(e.text)}</td></tr>`).join("");
+  const applied = d.applied.map(a => `<div class="entry"><code>${esc(a.id)}</code><span style="flex:1">${a.removed ? '<span class="muted">no longer in the file</span>' : esc((a.roles || []).join(", ")) + " · " + esc(a.text)}</span></div>`).join("");
+  return `<h3>Details</h3><details class="row"><summary>Request, branch, learnings</summary><div class="in">
+    <details class="row"><summary>Full request</summary><div class="in"><pre class="md">${esc(d.request)}</pre></div></details>
+    <dl class="kv">${row("Branch", esc(j.branch))}${row("Pull request", d.pr ? `<a href="${esc(d.pr)}" target="_blank" rel="noopener">${esc(d.pr)}</a>` : "")}
+      ${row("Created", d.created ? esc(new Date(d.created).toLocaleString()) + (d.owner ? " by " + esc(d.owner) : "") : "")}
+      ${row("Tokens", `${fmt(j.tokens)} of ${fmt(j.budget)}`)}
+      ${row("Learnings recorded", d.retro_tokens != null ? `after the task (retro, ${fmt(d.retro_tokens)} tokens)` : "")}
+      ${row("Accepted as is", d.accepts.map(a => esc(a.reason || "") + (a.by ? " (" + esc(a.by) + ")" : "")).join("<br>"))}</dl>
+    ${d.cost.length ? `<details class="row"><summary>Tokens by step</summary><div class="in"><table>${d.cost.map(c => `<tr><td>${esc(c.stage || "")}${c.round ? " round " + c.round : ""}</td><td>${esc(c.who)}</td><td style="text-align:right">${fmt(c.tokens)}</td></tr>`).join("")}</table></div></details>` : ""}
+    ${d.applied.length ? `<h3>Learnings applied</h3>${applied}` : ""}
+    ${alerts ? `<h3>Notices <button class="secondary small" style="float:right" onclick="clearAlerts('${esc(j.id)}')">Clear all</button></h3>${alerts}` : ""}
+    ${problems ? `<h3>Errors and blocked actions</h3><table>${problems}</table>` : ""}
+    ${j.status === "done" ? `<div style="margin-top:14px"><button class="danger" onclick="delTask('${esc(j.id)}')">Delete this task…</button></div>` : ""}</div></details>`;
+}
+function taskHtml(j) {
+  return `<h2 class="title">${esc(j.title)}</h2>
+    <div class="status-line${j.needs_you ? " needs" : ""}">task-${esc(j.id)} · ${esc(j.text)}${j.round > 1 && !["done", "cancelled", "queued"].includes(j.status) ? ` · round ${j.round}${j.rounds_allowed && j.round <= j.rounds_allowed ? " of " + j.rounds_allowed : ""}` : ""}</div>
+    ${decisionHtml(j)}${j.stalled && !j.decision ? `<div class="decision"><h3>No activity for ${j.quiet_minutes} min</h3><div>The Claude Code session running it may have stopped. If it has, run /epi:start task-${esc(j.id)} in Claude Code to continue.</div></div>` : ""}
+    <h3>Progress</h3>${progressHtml(j)}
+    ${detailsHtml(j)}`;
+}
+async function delTask(id) {
+  if (!confirm(`Delete task-${id}? Its progress, reports and notices are removed. The merged code is not touched.`)) return;
+  try { await post("/api/task/delete", {id}); closeDrawer(); loadBoard(); }
+  catch (e) { alert(e.message); }
+}
+async function clearAlerts(task, ids) {
+  await post("/api/alerts/clear", {task, ids});
+  await openTask(task); loadBoard();
+}
+/* Render the drawer; when it is a refresh, keep what the person had open, typed and scrolled to. */
+function renderTask(j, keep) {
+  const body = document.getElementById("drawer-body"), drawer = document.getElementById("drawer");
+  const open = keep ? [...body.querySelectorAll("details")].map(d => d.open) : [];
+  const top = body.scrollTop, scroll = drawer.scrollTop;
+  const box = document.getElementById("note-box"), ta = document.getElementById("note");
+  const to = document.getElementById("send-to");
+  const note = keep && box && !box.hidden ? {action: NOTE_ACTION, text: ta.value, focus: document.activeElement === ta, to: to && to.value} : null;
+  body.innerHTML = taskHtml(j);
+  if (keep) {
+    const ds = [...body.querySelectorAll("details")];
+    if (ds.length === open.length) ds.forEach((d, i) => { if (d.open !== open[i]) d.open = open[i]; });
+    if (note && document.getElementById("note-box")) {
+      askNote(note.action); const t = document.getElementById("note");
+      t.value = note.text; if (!note.focus) t.blur();
+      const sel = document.getElementById("send-to"); if (sel && note.to) sel.value = note.to;
+    }
+    body.scrollTop = top; drawer.scrollTop = scroll;
+  }
+  drawer.classList.add("open");
+}
+async function openTask(id) {
+  history.replaceState(null, "", "#task-" + id);
+  CURRENT_TASK = id;
+  const j = await api("/api/task?id="+encodeURIComponent(id));
+  LAST_TASK = JSON.stringify(j);
+  renderTask(j, false);
+}
+async function pollTask() {
+  if (!CURRENT_TASK || !document.getElementById("drawer").classList.contains("open")) return;
+  const id = CURRENT_TASK, j = await api("/api/task?id="+encodeURIComponent(id));
+  const key = JSON.stringify(j);
+  if (id !== CURRENT_TASK || key === LAST_TASK) return;
+  LAST_TASK = key;
+  renderTask(j, true);
+}
+document.addEventListener("mousedown", e => {
+  const d = document.getElementById("drawer");
+  if (d.classList.contains("open") && !d.contains(e.target) && !e.target.closest(".card, .strip a, .addcard, #pp-add, [data-keep-drawer]")) closeDrawer();
+});
+function closeDrawer() { document.getElementById("drawer").classList.remove("open"); history.replaceState(null, "", location.pathname + location.search); }
+
+
+/* ---------------- Settings: Global, Workflow, Learnings ---------------- */
+let S = null, changes = {}, curSub = "global", ADV = false, OPENSTEP = null;
+let PACK = null, WOPS = [], WDIFF = null, WMSG = "", ADDING = null, RULES = null, RDIFF = null, REVIEW = false;
+const get = (o, p) => p.split(".").reduce((a, k) => a == null ? a : a[k], o);
+const isSet = (o, p) => get(o, p) !== undefined;
+const curVal = p => p in changes ? changes[p] : get(S.effective, p);
+const tabOfPath = p => ({stage: "workflow", agent: "workflow", global: "global"})[p.split(".")[0]];
+const schemaTab = id => S.schema.tabs.find(t => t.id === id);
+const stageFields = sid => (schemaTab("stage").sections.find(s => s.id === sid) || {fields: []}).fields;
+const agentFields = name => (schemaTab("agent").sections.find(s => s.id === name) || {fields: []}).fields;
+
+/* a field applies to a stage or a step only when its schema `applies` says so */
+function appliesTo(f, ctx) {
+  const a = f.applies || {};
+  if (a.kind && ctx.kind && !a.kind.includes(ctx.kind)) return false;
+  if (a.writes && !a.writes.includes(ctx.writes)) return false;
+  return true;
+}
+
+const optLabel = (f, o) => (f.option_labels || {})[String(o)] ? o + " · " + f.option_labels[String(o)] : String(o);
+function inputFor(f) {
+  const v = curVal(f.path), id = "f-"+f.path;
+  if (f.type === "bool")
+    return `<select id="${id}" data-path="${f.path}" data-type="bool"><option value="true" ${v === true ? "selected" : ""}>on</option><option value="false" ${v === false ? "selected" : ""}>off</option></select>`;
+  if (f.type === "enum") {
+    const opts = f.options.map(String), cur = v == null ? "" : String(v);
+    if (cur !== "" && !opts.includes(cur)) opts.push(cur);
+    const inh = f.inherits ? `<option value="" ${cur === "" ? "selected" : ""}>follow the global setting (${esc(optLabel(f, get(S.effective, f.inherits)))})</option>`
+      : get(S.defaults, f.path) == null ? `<option value="" ${cur === "" ? "selected" : ""}>default</option>` : "";
+    return `<select id="${id}" data-path="${f.path}" data-type="enum" data-vt="${f.value_type || ""}">${inh}${opts.map(o => `<option value="${esc(o)}" ${o === cur ? "selected" : ""}>${esc(optLabel(f, o))}</option>`).join("")}</select>`;
+  }
+  if (f.type === "list") return `<textarea id="${id}" rows="3" data-path="${f.path}" data-type="list" placeholder="one per line">${esc((v||[]).filter(x => !f.additive || !(get(S.defaults, f.path)||[]).includes(x)).join("\n"))}</textarea>`;
+  const t = f.type === "int" || f.type === "float" ? "number" : "text";
+  return `<input id="${id}" type="${t}" ${f.type==="float"?'step="0.05"':''} ${f.min!=null?`min="${f.min}"`:''} ${f.max!=null?`max="${f.max}"`:''} data-path="${f.path}" data-type="${f.type}" value="${esc(v ?? "")}">`
+    + (f.unit === "tokens" ? `<span class="unit" id="unit-${f.path}">${v ? fmt(v) + " tokens" : ""}</span>` : "");
+}
+function fieldHtml(f) {
+  return `<div class="field${f.path in changes ? " changed" : ""}" id="row-${f.path}"><label for="f-${f.path}">${esc(f.label)}${isSet(S.overrides, f.path) ? '<span class="ov">changed</span>' : ""}</label>
+    <div>${inputFor(f)}<div class="help">${esc(f.help)}${f.usage === "month" ? " · used this month: "+fmt(S.usage.month) : ""}${f.additive ? " · built in: "+esc((get(S.defaults, f.path)||[]).join(", ")) : ""}</div><div class="err" id="err-${f.path}"></div></div></div>`;
+}
+function parseField(el) {
+  const t = el.dataset.type, v = el.value.trim();
+  if (t === "int") return v === "" ? null : parseInt(v, 10);
+  if (t === "float") return v === "" ? null : parseFloat(v);
+  if (t === "list") return v ? v.split("\n").map(x => x.trim()).filter(Boolean) : null;
+  if (t === "bool") return v === "true";
+  if (t === "enum" && el.dataset.vt === "int") return v === "" ? null : parseInt(v, 10);
+  return v === "" ? null : v;
+}
+function markDirty(path) {
+  const b = document.getElementById("st-" + tabOfPath(path)); if (b) b.classList.add("dirty");
+}
+function onField(el) {
+  const p = el.dataset.path, v = parseField(el); changes[p] = v;
+  const row = document.getElementById("row-" + p); if (row) row.classList.add("changed"); else el.classList.add("changed");
+  const u = document.getElementById("unit-" + p); if (u) u.textContent = v ? fmt(v) + " tokens" : "";
+  const err = document.getElementById("err-" + p); if (err) err.textContent = "";
+  markDirty(p);
+}
+const wire = root => root.querySelectorAll("[data-path]").forEach(el => el.addEventListener("input", () => onField(el)));
+
+/* ---- Global ---- */
+function globalHtml() {
+  const tab = schemaTab("global");
+  const section = sec => {
+    if (sec.collection === "principles") return ADV ? `<div class="group"><h3>${esc(sec.title)} <button class="secondary small" id="pp-add" style="float:right" onclick="ppEdit(null)">+ Add principle</button></h3>
+      <div class="muted small" style="margin:-4px 0 8px">How this repo does things. Agents are pointed at the ones that apply to them and read what is relevant. Files with no text yet are not shown to agents.</div>
+      <div id="pp-list"></div><div class="err" id="err-principles"></div></div>` : "";
+    const fs = (sec.fields || []).filter(f => ADV || f.level === "basic");
+    const extra = sec.open ? `<div class="muted small">You can add more by editing .claude/epi.md.</div>` : "";
+    return fs.length ? `<div class="group"><h3>${esc(sec.title)}</h3>${fs.map(fieldHtml).join("")}${ADV ? extra : ""}</div>` : "";
+  };
+  return tab.sections.map(section).join("") +
+    `<button class="secondary" onclick="ADV=!ADV;renderSettings()">${ADV ? "Hide advanced settings" : "Show advanced settings"}</button>`;
+}
+
+/* ---- Workflow: stages left to right, each with its steps by phase ---- */
+const stageOf = sid => S.workflow.stages.find(s => s.id === sid);
+/* the phases as people see them: the sign-off is the start of Finish. Steps are edited in workflow.yaml; `on` is its `enabled`. */
+const SHOWN = ["plan", "do", "verify", "review", "finalize", "finish"];
+function stepsOf(st) {
+  const phases = {}, tag = (ph, xs) => xs.map(x => ({...x, ph}));
+  for (const ph of S.workflow.lists) phases[ph] = [...(ph === "finish" ? tag("signoff", st.phases.signoff) : []), ...tag(ph, st.phases[ph])];
+  return phases;
+}
+const UP_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 10l4.5-4.5 4.5 4.5"/></svg>';
+const DOWN_ICON = '<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 6l4.5 4.5L12.5 6"/></svg>';
+const opAttr = op => esc(JSON.stringify(op));
+function stepRowHtml(st, ph, x, i, n) {
+  const link = x.settings && ["agent", "skill"].includes(x.kind), at = {stage: st.id, phase: x.ph, id: x.id};
+  const tool = (title, icon, op, cls = "") => `<a class="ia ${cls}" title="${title}" onclick="wop(${opAttr({...at, ...op})})">${icon}</a>`;
+  const tools = x.ph === "signoff" ? "" : `<span class="tools">${i > 0 ? tool("Move up", UP_ICON, {op: "move", by: -1}) : ""}${i < n - 1 ? tool("Move down", DOWN_ICON, {op: "move", by: 1}) : ""}${tool("Remove", DEL_ICON, {op: "remove"}, "del")}</span>`;
+  return `<div class="wstep${x.on ? "" : " off"}">
+    <label class="sw" title="${x.on ? "On" : "Off"}"><input type="checkbox" ${x.on ? "checked" : ""} onchange="wtoggle(${opAttr(at)}, this.checked)"><span></span></label>
+    <span class="name${link ? " link" : ""}" ${link ? `onclick="openStepSettings('${esc(st.id)}','${esc(x.name)}','${esc(x.kind)}')" title="Settings"` : ""}>${esc(x.label)}</span>
+    ${x.if ? `<span class="kind" title="Runs only when: ${esc(x.if)}">if</span>` : ""}
+    <span class="kind">${esc(x.kind === "run" ? "command" : x.kind === "human" ? "person" : x.kind)}</span>${tools}</div>`;
+}
+function stageHtml(st) {
+  const phases = stepsOf(st), ctx = {stage: st};
+  const fs = stageFields(st.id).filter(f => appliesTo(f, ctx));
+  const head = fs.filter(f => ["rounds", "budget_tokens"].includes(f.path.split(".")[2]));
+  const rest = fs.filter(f => !head.includes(f));
+  const small = f => `<label title="${esc(f.help)}">${esc(f.label)} <input type="number" id="f-${f.path}" data-path="${f.path}" data-type="${f.type}" value="${esc(curVal(f.path) ?? "")}" ${f.min != null ? `min="${f.min}"` : ""} ${f.max != null ? `max="${f.max}"` : ""} class="${f.path in changes ? "changed" : ""}">${f.unit === "tokens" ? `<span class="unit" id="unit-${f.path}">${curVal(f.path) ? fmt(curVal(f.path)) : ""}</span>` : ""}</label>`;
+  const rows = ph => phases[ph].length ? `<div class="phase"><h4>${esc(S.workflow.phase_labels[ph])}</h4>${phases[ph].map(x => stepRowHtml(st, ph, x, phases[ph].filter(y => y.ph === ph).indexOf(x), phases[ph].filter(y => y.ph === ph).length)).join("")}</div>` : "";
+  return `<div class="stage"><h3>${esc(st.name)}</h3>
+    <div class="sets">${head.map(small).join("")}</div>
+    ${rest.length ? `<details class="row"><summary class="small muted">More settings</summary><div class="in">${rest.map(fieldHtml).join("")}</div></details>` : ""}
+    ${SHOWN.map(rows).join("")}${addFormHtml(st)}</div>`;
+}
+function addFormHtml(st) {
+  if (ADDING !== st.id) return `<button class="more small addstep" onclick="ADDING='${esc(st.id)}';renderSettings()">+ Add step</button>`;
+  const cmds = S.workflow.commands.map(c => `<option>${esc(c)}</option>`).join("");
+  return `<div class="addform"><select id="add-phase">${S.workflow.lists.map(ph => `<option value="${ph}"${ph === "review" ? " selected" : ""}>${esc(S.workflow.phase_labels[ph])}</option>`).join("")}</select>
+    <select id="add-kind" onchange="document.getElementById('add-name').setAttribute('list', this.value === 'run' ? 'add-cmds' : '')"><option value="agent">Agent</option><option value="skill">Skill</option><option value="run">Command</option></select>
+    <input id="add-name" placeholder="Name, e.g. a11y or typecheck"><datalist id="add-cmds">${cmds}</datalist>
+    <input id="add-if" placeholder="Only when (optional), e.g. touches-ui">
+    <input id="add-id" placeholder="Id (optional)"><input id="add-outputs" placeholder="Outputs (optional), e.g. blocking, files">
+    <textarea id="add-env" rows="2" placeholder="Environment of a command, one NAME=value per line (optional)"></textarea>
+    <div class="err" id="add-err">${esc(ADDING === st.id ? WMSG : "")}</div>
+    <div><button class="primary small" onclick="addStep('${esc(st.id)}')">Add</button> <button class="secondary small" onclick="ADDING=null;WMSG='';renderSettings()">Cancel</button></div></div>`;
+}
+const diffHtml = d => `<div class="diff">${esc(d).split("\n").map(l => /^\+(?!\+\+)/.test(l) ? `<span class="add">${l}</span>` : /^-(?!--)/.test(l) ? `<span class="del">${l}</span>` : l).join("\n")}</div>`;
+function packHtml() {
+  if (!PACK || !PACK.newer) return "";
+  const files = (PACK.files || []).filter(f => !["same", "keep"].includes(f.action)), conf = PACK.conflicts || [];
+  const review = !REVIEW ? "" : `<div class="group">${conf.length ? `<div class="err">Conflicts, nothing was written: ${[...new Set(conf.map(c => c.file))].map(esc).join(", ")}${conf.filter(c => c.field !== undefined).map(c => `<div>${esc(c.text)}</div>`).join("")}</div>` : ""}
+    ${files.map(f => `<div style="margin-bottom:8px"><b>${esc(f.file)}</b> <span class="muted">${esc(f.action)}</span>${(PACK.diffs || {})[f.file] ? diffHtml(PACK.diffs[f.file]) : ""}</div>`).join("") || '<span class="muted">No file changes</span>'}</div>`;
+  return `<div class="banner"><span>${esc(PACK.pack)} ${esc(PACK.installed)} → ${esc(PACK.available)} available</span>
+    <button class="secondary small" onclick="REVIEW=!REVIEW;renderSettings()">Review</button>
+    <button class="primary small" onclick="packUpgrade()">Upgrade</button></div>${review}`;
+}
+function pendingHtml() {
+  if (!WDIFF && !WMSG) return "";
+  return `<div class="group">${WMSG && ADDING === null ? `<div class="err">${esc(WMSG)}</div>` : ""}${WDIFF ? `<h3>Changes to workflow.yaml</h3>${diffHtml(WDIFF)}
+    <div class="actions"><button class="primary" onclick="wsave()">Save</button><button class="secondary" onclick="wdiscard()">Discard</button></div>` : ""}</div>`;
+}
+function rulesHtml() {
+  return `<div class="group" style="margin-top:12px"><h3>Rules</h3>
+    <textarea class="rules" id="rules" rows="10" spellcheck="false" oninput="RULES=this.value;RDIFF=null">${esc(RULES ?? S.rules)}</textarea>
+    <div class="actions"><button class="secondary small" onclick="rulesPreview()">Review rules</button><span class="err">${esc(RDIFF && RDIFF.error || "")}</span></div>
+    ${RDIFF && RDIFF.diff != null ? (RDIFF.diff ? `<h3>Changes to ${esc(RDIFF.path)}</h3>${diffHtml(RDIFF.diff)}
+      <div class="actions"><button class="primary" onclick="rulesSave()">Save</button><button class="secondary" onclick="RULES=null;RDIFF=null;renderSettings()">Discard</button></div>` : '<span class="muted">No changes</span>') : ""}</div>`;
+}
+function workflowHtml() {
+  return `${packHtml()}${pendingHtml()}<div class="muted small" style="margin-bottom:10px">Workflow: ${esc(S.workflow.name)}. Click an agent or skill to change how it works.</div>
+    <div class="flow">${S.workflow.stages.map(stageHtml).join("")}</div>${rulesHtml()}`;
+}
+async function wop(op) {
+  try { const r = await post("/api/workflow/preview", {ops: [...WOPS, op]}); WOPS.push(op); WDIFF = r.diff; WMSG = ""; ADDING = null; }
+  catch (e) { WMSG = e.message; }
+  renderSettings();
+}
+const wtoggle = (at, on) => wop({...at, op: "toggle", enabled: on});
+function addStep(sid) {
+  const v = id => document.getElementById(id).value.trim(), name = v("add-name"), kind = v("add-kind"), rule = v("add-if"), err = document.getElementById("add-err");
+  if (!/^[\w.-]+$/.test(name)) return err.textContent = "Give the name of an agent, skill or command";
+  const outputs = v("add-outputs").split(/[\s,]+/).filter(Boolean);
+  const env = Object.fromEntries(v("add-env").split("\n").map(l => l.trim()).filter(Boolean).map(l => [l.split("=")[0].trim(), l.slice(l.indexOf("=") + 1).trim()]));
+  wop({op: "add", stage: sid, phase: v("add-phase"), kind, name, if: rule, id: v("add-id"), outputs, env});
+}
+function wdiscard() { WOPS = []; WDIFF = null; WMSG = ""; renderSettings(); }
+async function wsave() {
+  try { await post("/api/workflow", {ops: WOPS, hash: S.workflow_hash}); await loadSettings(); status("Saved. workflow.yaml has uncommitted changes: commit it when you're ready."); }
+  catch (e) { WMSG = e.message; renderSettings(); if (e.message.includes("changed on disk")) setTimeout(loadSettings, 1500); }
+}
+async function rulesPreview() {
+  try { RDIFF = {...await post("/api/rules/preview", {text: RULES ?? S.rules}), error: ""}; } catch (e) { RDIFF = {error: e.message}; }
+  renderSettings();
+}
+async function rulesSave() {
+  try { await post("/api/rules", {text: RULES ?? S.rules, hash: S.hash}); await loadSettings(); status("Saved. settings.md has uncommitted changes: commit it when you're ready."); }
+  catch (e) { RDIFF = {error: e.message}; renderSettings(); }
+}
+async function packUpgrade() {
+  try {
+    const r = await post("/api/pack/upgrade", {});
+    if (r.conflicts) { PACK = {...PACK, conflicts: r.conflicts}; REVIEW = true; return renderSettings(); }
+    await loadSettings(); status(`Upgraded ${r.pack} to ${r.to}. The playbook files have uncommitted changes: commit them when you're ready.`);
+  } catch (e) { WMSG = e.message; renderSettings(); }
+}
+function openStepSettings(sid, name, kind) {
+  OPENSTEP = {sid, name, kind};
+  const ctx = {kind, writes: curVal(`agent.${name}.writes`)};
+  const fs = agentFields(name).filter(f => appliesTo(f, ctx));
+  document.getElementById("drawer-body").innerHTML = `<h2 class="title">${esc(titleCase(name))}</h2>
+    <div class="muted small">${esc(kind === "skill" ? "A skill" : "An agent")} in the ${esc((stageOf(sid) || {}).name || sid)} stage. Changes apply to every stage that uses it.</div>
+    <div style="margin-top:12px">${fs.map(fieldHtml).join("") || '<div class="muted">Nothing to set.</div>'}</div>
+    <div class="actions"><button class="secondary" onclick="closeDrawer()">Done</button><span class="muted small">Then use “Review changes” on the page.</span></div>`;
+  wire(document.getElementById("drawer-body"));
+  document.getElementById("drawer-body").querySelectorAll("[data-path$='.writes']").forEach(el => el.addEventListener("change", () => openStepSettings(sid, name, kind)));
+  document.getElementById("drawer").classList.add("open");
+}
+const titleCase = s => (s || "").replace(/[-_]+/g, " ").replace(/^./, c => c.toUpperCase());
+
+/* ---- Learnings ---- */
+function learningsHtml() {
+  const entries = list => list.length ? list.map(e => `<div class="entry" id="en-${esc(e.id)}"><code>${esc(e.id)}</code><span style="flex:1">${esc(e.roles.join(", "))} · ${esc(e.text)}</span><a class="ia" title="Edit" onclick="editLearning('${esc(e.id)}')">${EDIT_ICON}</a><a class="ia del" title="Delete" onclick="delLearning('${esc(e.id)}')">${DEL_ICON}</a></div>`).join("") : '<span class="muted">None</span>';
+  return `<div class="group"><h3>Learnings</h3>${entries(S.learnings.Learnings||[])}<h3 style="margin-top:12px">Answers</h3>${entries(S.learnings.Answers||[])}</div>`;
+}
+
+const SETTING_TABS = [["global", "Global"], ["workflow", "Workflow"], ["learnings", "Learnings"]];
+function renderSettings() {
+  const body = {global: globalHtml, workflow: workflowHtml, learnings: learningsHtml}[curSub]();
+  const dirty = new Set(Object.keys(changes).map(tabOfPath));
+  document.getElementById("settings-view").innerHTML = `<div class="subtabs">${SETTING_TABS.map(([id, t]) => `<button id="st-${id}" class="${id === curSub ? "on" : ""}${dirty.has(id) ? " dirty" : ""}" onclick="subTab('${id}')">${t}</button>`).join("")}</div>
+    ${body}
+    <div class="actions"><button class="primary" onclick="preview()">Review changes</button><span class="muted" id="status"></span></div>
+    <div id="diff"></div>`;
+  wire(document.getElementById("settings-view"));
+  if (curSub === "global") ppRender();
+}
+async function loadSettings() {
+  S = await api("/api/settings"); changes = {}; WOPS = []; WDIFF = null; WMSG = ""; ADDING = null; RULES = null; RDIFF = null; REVIEW = false;
+  PACK = await api("/api/pack").catch(() => null); renderSettings();
+}
+function subTab(id) { curSub = id; renderSettings(); history.replaceState(null, "", "#settings/" + id); }
+
+/* ---- principles: files in .claude/principles/, a list in Global, editor in the side panel ---- */
+const ppMsg = (m, bad) => { const e = document.getElementById("err-principles"); if (e) e.textContent = bad ? m : ""; if (!bad) status(m); };
+async function ppReload() {
+  const n = await api("/api/settings");
+  S.effective.global.principle.list = n.effective.global.principle.list; S.principle_problems = n.principle_problems;
+  ppRender();
+}
+function ppRender() {
+  const el = document.getElementById("pp-list"); if (!el) return;
+  const specs = S.effective.global.principle.list || {};
+  const rows = Object.entries(specs).map(([n, p]) => {
+    const empty = !(p.body || "").replace(/<!--[\s\S]*?-->/g, "").trim();
+    const who = (p.applies_to && p.applies_to.length) ? p.applies_to.join(", ") : "all";
+    return `<tr><td><b>${esc(n)}</b>${empty ? ' <span class="muted" title="No text yet: agents are not shown this file">placeholder</span>' : ""}</td>
+      <td class="muted">${esc(p.summary || "")}</td><td>${esc(who)}</td><td class="muted">${esc(p.when || "")}</td>
+      <td class="rv-act"><a title="Edit" onclick="ppEdit('${esc(n)}')">${EDIT_ICON}</a><a class="del" title="Delete" onclick="ppRemove('${esc(n)}')">${DEL_ICON}</a></td></tr>`;
+  }).join("");
+  const bad = (S.principle_problems || []).filter(p => !specs[p.name]).map(p => `<tr><td><span class="rv-err">⚠</span> <b>${esc(p.name)}</b></td>
+      <td colspan="3" class="muted"><span class="rv-file">${esc(p.file)}</span> <span class="rv-errtext">${esc(p.error)}</span></td><td></td></tr>`).join("");
+  const none = !rows && !bad ? `<div class="muted" style="margin-bottom:8px">No principles yet. Run /epi:init to add the starter set, or add your own.</div>` : "";
+  el.innerHTML = `${none}${rows || bad ? `<table><tr><th>Name</th><th>Summary</th><th>Applies to</th><th>When</th><th></th></tr>${rows}${bad}</table>` : ""}`;
+}
+let PP = null;
+function ppEdit(name) {
+  const p = name ? S.effective.global.principle.list[name] : {};
+  PP = {name};
+  const row = (label, html, help) => `<div class="field" style="grid-template-columns:110px 1fr"><label>${label}</label><div>${html}${help ? `<div class="help">${help}</div>` : ""}</div></div>`;
+  const roles = p.applies_to && p.applies_to.length ? p.applies_to : [];
+  document.getElementById("drawer-body").innerHTML = `<h2 style="margin-top:0">${name ? "Edit principle: " + esc(name) : "Add principle"}</h2>
+    ${name ? "" : row("Name", `<input id="pp-name" placeholder="e.g. api-conventions">`, "Letters, digits, - and _. Becomes .claude/principles/&lt;name&gt;.md")}
+    ${row("Summary", `<input id="pp-summary" value="${esc(p.summary || "")}" placeholder="One line agents see before opening the file">`)}
+    ${row("Applies to", S.schema.roles.map(r => `<label style="display:inline-block;margin-right:12px"><input type="checkbox" class="pp-role" value="${r}" ${roles.includes(r) ? "checked" : ""} style="width:auto"> ${r}</label>`).join(""), "None ticked means all agents")}
+    ${row("When", `<textarea id="pp-when" rows="2" placeholder="always">${esc(p.when || "")}</textarea>`, "Optional: touches-ui, risk>=medium, paths:[globs], joined with 'or'. Judged once the spec exists")}
+    ${row("Principle", `<textarea id="pp-body" rows="16" spellcheck="false" style="font-family:ui-monospace,Menlo,monospace;font-size:12px">${esc((p.body || "").replace(/<!--[\s\S]*?-->/g, "").trim())}</textarea>`, "What an agent should know to do this the way the repo does it. Markdown.")}
+    <div class="err" id="pp-err"></div>
+    <div class="actions"><button class="primary" onclick="ppSave()">Save</button> <button class="secondary" onclick="closeDrawer()">Cancel</button></div>`;
+  document.getElementById("drawer").classList.add("open");
+}
+async function ppSave() {
+  const $ = id => document.getElementById(id), err = m => { $("pp-err").textContent = m; };
+  const name = PP.name || $("pp-name").value.trim();
+  const front = {summary: $("pp-summary").value.trim(), applies_to: [...document.querySelectorAll(".pp-role:checked")].map(x => x.value),
+                 when: $("pp-when").value.trim().replace(/\s*\n\s*/g, " ")};
+  try {
+    await api("/api/principle/save", {method: "POST", body: JSON.stringify({name, front, body: $("pp-body").value})});
+    closeDrawer(); await ppReload(); ppMsg("Saved " + name + ". The file has uncommitted changes: commit it when you're ready.");
+  } catch (e) { err(e.message); }
+}
+async function ppRemove(n) {
+  if (!confirm(`Remove principle "${n}" from the list? Its file stays on disk.`)) return;
+  try { await api("/api/principle/delete", {method: "POST", body: JSON.stringify({name: n})}); await ppReload(); ppMsg("Removed " + n); }
+  catch (e) { ppMsg(e.message, true); }
+}
+
+
+async function preview() {
+  if (document.querySelector(".err:not(:empty)")) return status("Fix the errors first");
+  if (!Object.keys(changes).length) return status("No changes");
+  try {
+    const r = await api("/api/settings/preview", {method: "POST", body: JSON.stringify({changes})});
+    const a = r.before.split("\n"), b = r.after.split("\n");
+    const lines = b.map(l => a.includes(l) ? esc(l) : `<span class="add">+ ${esc(l)}</span>`)
+      .concat(a.filter(l => !b.includes(l)).map(l => `<span class="del">- ${esc(l)}</span>`));
+    document.getElementById("diff").innerHTML = `<h3>Changes to ${esc((r.files || []).join(", "))}</h3><div class="diff">${lines.join("\n")}</div>
+      ${(r.writes || []).length ? `<p class="muted">Will also write: ${r.writes.map(w => esc(w.path) + (w.new ? " (new)" : " (changed)")).join(", ")}</p>` : ""}
+      <div class="actions"><button class="primary" onclick="save()">Save</button><button class="secondary" onclick="loadSettings()">Discard</button></div>`;
+  } catch (e) { status(e.message); }
+}
+async function save() {
+  try {
+    await api("/api/settings", {method: "POST", body: JSON.stringify({changes, hash: S.hash})});
+    await loadSettings(); status("Saved. The settings files have uncommitted changes: commit them when you're ready.");
+  } catch (e) { status(e.message); if (e.message.includes("changed on disk")) setTimeout(loadSettings, 1500); }
+}
+
+function editLearning(id) {
+  const e = [...(S.learnings.Learnings || []), ...(S.learnings.Answers || [])].find(x => x.id === id), row = document.getElementById("en-" + id);
+  row.innerHTML = `<code>${esc(id)}</code><span style="flex:1;display:flex;flex-direction:column;gap:6px">
+    <input id="el-roles" value="${esc(e.roles.join(", "))}" placeholder="roles (comma-separated, or all)">
+    <textarea id="el-text" rows="3">${esc(e.text)}</textarea></span>
+    <button class="primary" onclick="saveLearning('${esc(id)}')">Save</button><button class="secondary" onclick="loadSettings()">Cancel</button>`;
+  document.getElementById("el-text").focus();
+}
+async function saveLearning(id) {
+  const roles = document.getElementById("el-roles").value.split(",").map(x => x.trim()).filter(Boolean), text = document.getElementById("el-text").value;
+  try { await api("/api/learnings/update", {method: "POST", body: JSON.stringify({id, roles, text})}); await loadSettings(); }
+  catch (e) { status(e.message); }
+}
+async function delLearning(id) {
+  if (!confirm("Delete " + id + "?")) return;
+  try { await api("/api/learnings/delete", {method: "POST", body: JSON.stringify({id})}); await loadSettings(); }
+  catch (e) { status(e.message); }
+}
+
+function status(t) { document.getElementById("status").textContent = t; }
+
+/* ---------------- Tabs ---------------- */
+function show(tab) {
+  document.getElementById("board-view").hidden = tab !== "board";
+  document.getElementById("settings-view").hidden = tab !== "settings";
+  document.getElementById("help-view").hidden = tab !== "help";
+  document.getElementById("tab-help").classList.toggle("on", tab === "help");
+  document.getElementById("tab-board").classList.toggle("on", tab === "board");
+  document.getElementById("tab-settings").classList.toggle("on", tab === "settings");
+  if (tab === "settings") { history.replaceState(null, "", "#settings/" + curSub); loadSettings(); }
+  if (tab === "help") loadHelp();
+}
+document.getElementById("tab-board").onclick = () => show("board");
+document.getElementById("tab-settings").onclick = () => show("settings");
+document.getElementById("tab-help").onclick = () => show("help");
+
+function md(src) {
+  const inl = t => esc(t).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+  const cells = l => l.trim().replace(/^\||\|$/g, "").split(/(?<!\\)\|/).map(c => c.trim().replace(/\\\|/g, "|"));
+  const L = src.split("\n"), out = []; let i = 0;
+  while (i < L.length) {
+    const l = L[i];
+    if (/^```/.test(l)) { const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]); i++; out.push(`<pre><code>${esc(b.join("\n"))}</code></pre>`); continue; }
+    let m = l.match(/^(#{1,3})\s+(.*)/);
+    if (m) { out.push(`<h${m[1].length}>${inl(m[2])}</h${m[1].length}>`); i++; continue; }
+    if (/^\|/.test(l) && /^\|[\s:|-]+\|?\s*$/.test(L[i + 1] || "")) {
+      const head = cells(l); i += 2; const rows = [];
+      while (i < L.length && /^\|/.test(L[i])) rows.push(cells(L[i++]));
+      out.push(`<table><tr>${head.map(c => `<th>${inl(c)}</th>`).join("")}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${inl(c)}</td>`).join("")}</tr>`).join("")}</table>`); continue;
+    }
+    if (/^\s*([-*]|\d+\.)\s/.test(l)) {
+      const tag = /^\s*\d+\./.test(l) ? "ol" : "ul", items = [];
+      while (i < L.length && /^\s*([-*]|\d+\.)\s/.test(L[i])) items.push(L[i++].replace(/^\s*([-*]|\d+\.)\s+/, ""));
+      out.push(`<${tag}>${items.map(x => `<li>${inl(x)}</li>`).join("")}</${tag}>`); continue;
+    }
+    if (!l.trim()) { i++; continue; }
+    const p = []; while (i < L.length && L[i].trim() && !/^(```|#|\||\s*([-*]|\d+\.)\s)/.test(L[i])) p.push(L[i++]);
+    out.push(`<p>${inl(p.join(" "))}</p>`);
+  }
+  return out.join("\n");
+}
+
+async function loadHelp() {
+  const el = document.getElementById("help-text");
+  if (el.innerHTML) return;
+  const r = await fetch("/api/help", {headers: {"X-Epi-Token": TOKEN}});
+  el.innerHTML = md(await r.text());
+}
+const sm = location.hash.match(/^#settings(?:\/(\w+))?$/);
+if (sm) { if (sm[1]) curSub = {stage: "workflow", agent: "workflow"}[sm[1]] || sm[1]; show("settings"); }
+loadBoard().then(() => { const m = location.hash.match(/^#task-(\w+)$/); if (m) openTask(m[1]); })
+  .catch(e => { document.getElementById("board").textContent = e.message; setOffline(e); });
+setInterval(() => {
+  if (document.hidden) return;
+  if (!document.getElementById("board-view").hidden) { loadBoard().then(() => setOffline(null), setOffline); pollTask().catch(() => {}); }
+}, 4000);
+
+</script>
+</body>
+</html>
